@@ -1,0 +1,103 @@
+import socket
+import subprocess
+import sys
+
+import nmap
+
+
+class PortScanner:
+    def __init__(self):
+        self.target_ip = ''
+        self.target_ports = []
+        self.open_ports = []
+        self.services = {}
+        self.scanner = nmap.PortScanner()
+
+    def top_ports(self, ip_address):
+        top_ports = [20, 21, 22, 23, 25, 53, 80, 110, 139, 143, 443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080, 8443]
+        open_ports = []
+        closed_ports = []
+        for port in top_ports:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.1)
+            result = sock.connect_ex((ip_address, port))
+            if result == 0:
+                open_ports.append(port)
+            else:
+                closed_ports.append(port)
+            sock.close()
+        print("Open ports on %s:" % ip_address)
+        for port in open_ports:
+            service = self.get_service_name(port)
+            print("  %s (%s) open" % (port, service))
+        for port in closed_ports:
+            service = self.get_service_name(port)
+            print("  %s (%s) closed" % (port, service))
+        while True:
+            port_input = input("Enter a port number to see its version or press Enter to go back to the main menu: ")
+            if port_input == "":
+                break
+            try:
+                port = int(port_input)
+                if port in open_ports:
+                    version = self.get_service_version(ip_address, port)
+                    service = self.get_service_name(port)
+                    if version:
+                        print("Version of %s (%s) on %s: %s" % (port, service, ip_address, version))
+                    else:
+                        print("Version of %s (%s) on %s: Unknown" % (port, service, ip_address))
+                elif port in closed_ports:
+                    print("Port %s is closed" % port)
+                else:
+                    print("Port %s is not in the list of open or closed ports" % port)
+            except ValueError:
+                print("Invalid input, please enter a valid port number")
+
+    def get_service_name(self, port):
+        try:
+            services = socket.getservbyport(port)
+            return services
+        except OSError:
+            return "Unknown"
+
+    def get_service_version(self, ip_address, port):
+        try:
+            self.scanner.scan(ip_address, str(port))
+            return self.scanner[ip_address]['tcp'][port]['product'] + " " + self.scanner[ip_address]['tcp'][port]['version']
+        except KeyError:
+            return "Unknown"
+        
+    def menu(self):
+        print("Welcome to the Port Scanner!")
+        while True:
+            print("Please select an option:")
+            print("1. Network Discovery")
+            print("2. Scan top ports")
+            print("3. Exit")
+            choice = input()
+
+            if choice == '1':
+                ip_list = self.network_discovery()
+                print("Scanning the following IP addresses:")
+                for ip in ip_list:
+                    print(ip)
+                self.scanner.scan(hosts=' '.join(ip_list), arguments='-n -sP')
+                hosts_list = [(x, self.scanner[x]['status']['state']) for x in self.scanner.all_hosts()]
+                print("Active devices:")
+                for host, status in hosts_list:
+                    if status == 'up':
+                        print(host)
+
+            elif choice == '2':
+                ip_address = input("Enter the IP address to scan: ")
+                self.top_ports(ip_address)
+
+            elif choice == '3':
+                sys.exit()
+
+            else:
+                print("Invalid input, please enter a valid option")
+
+if __name__ == '__main__':
+    scanner = PortScanner()
+    scanner.menu()
